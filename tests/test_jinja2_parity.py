@@ -1,8 +1,12 @@
 """Render-parity tests: verify django-adminx output matches django.contrib.admin.
 
-Each test renders an admin view twice — once via our Jinja2 templates,
-once via Django's *original* DTL templates (from the django package) —
-then compares the normalized HTML. Differences indicate conversion bugs.
+Each test renders an admin view three ways:
+1. Our Jinja2 templates (the primary product)
+2. Our DTL templates (copied from Django, should be identical)
+3. Django's original DTL templates (the ground truth baseline)
+
+Then compares (1) vs (3) and (2) vs (3) to catch conversion bugs and
+accidental regressions in the DTL copies.
 """
 
 from __future__ import annotations
@@ -52,7 +56,23 @@ JINJA2_ADMINX = [
     },
 ]
 
-# Django's original DTL templates (the baseline).
+# Our DTL copies (APP_DIRS finds django_adminx/templates/admin/)
+DTL_ADMINX = [
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
+            ],
+        },
+    },
+]
+
+# Django's original DTL templates (the ground truth).
 # DIRS is listed before APP_DIRS, so Django's originals win over ours.
 DJANGO_ORIGINAL_DTL = [
     {
@@ -105,84 +125,61 @@ def extract_text_content(soup: BeautifulSoup) -> str:
     text = text.replace("\u201c", '"').replace("\u201d", '"')  # curly double quotes
     text = text.replace("\u2018", "'").replace("\u2019", "'")  # curly single quotes
     text = text.replace("\u2013", "-").replace("\u2014", "-")  # en/em dashes
-    text = text.replace("\xa0", " ")  # non-breaking space
-    return text
+    return text.replace("\xa0", " ")  # non-breaking space
 
 
-def extract_structure(soup: BeautifulSoup) -> list[str]:
-    """Extract the tag structure (tag names + key attributes) for comparison."""
-    structure = []
-    for tag in soup.find_all(True):
-        attrs = []
-        if tag.get("id"):
-            attrs.append(f'id="{tag["id"]}"')
-        if tag.get("class"):
-            attrs.append(f'class="{" ".join(tag["class"])}"')
-        if tag.get("name") and tag.name in ("input", "select", "textarea"):
-            attrs.append(f'name="{tag["name"]}"')
-        attr_str = " ".join(attrs)
-        structure.append(f"<{tag.name} {attr_str}>" if attr_str else f"<{tag.name}>")
-    return structure
-
-
-def compare_renders(jinja2_html: str, dtl_html: str) -> list[str]:
+def compare_renders(test_html: str, baseline_html: str, label: str = "test") -> list[str]:
     """Compare two rendered HTML strings and return a list of differences."""
-    j_soup = normalize_html(jinja2_html)
-    d_soup = normalize_html(dtl_html)
+    t_soup = normalize_html(test_html)
+    b_soup = normalize_html(baseline_html)
 
     diffs = []
 
     # Compare text content
-    j_text = extract_text_content(j_soup)
-    d_text = extract_text_content(d_soup)
-    if j_text != d_text:
-        # Find the first divergence point
-        j_words = j_text.split()
-        d_words = d_text.split()
-        for i, (jw, dw) in enumerate(zip(j_words, d_words)):
-            if jw != dw:
+    t_text = extract_text_content(t_soup)
+    b_text = extract_text_content(b_soup)
+    if t_text != b_text:
+        t_words = t_text.split()
+        b_words = b_text.split()
+        for i, (tw, bw) in enumerate(zip(t_words, b_words)):
+            if tw != bw:
                 context_start = max(0, i - 3)
-                j_context = " ".join(j_words[context_start : i + 5])
-                d_context = " ".join(d_words[context_start : i + 5])
-                diffs.append(f"Text differs at word {i}: Jinja2='...{j_context}...' vs DTL='...{d_context}...'")
+                t_context = " ".join(t_words[context_start : i + 5])
+                b_context = " ".join(b_words[context_start : i + 5])
+                diffs.append(f"Text differs at word {i}: {label}='...{t_context}...' vs baseline='...{b_context}...'")
                 break
-        if len(j_words) != len(d_words):
-            diffs.append(f"Text length differs: Jinja2={len(j_words)} words vs DTL={len(d_words)} words")
+        if len(t_words) != len(b_words):
+            diffs.append(f"Text length: {label}={len(t_words)} words vs baseline={len(b_words)} words")
 
-    # Compare structure (tag count by type)
-    j_tags = {}
-    for tag in j_soup.find_all(True):
-        j_tags[tag.name] = j_tags.get(tag.name, 0) + 1
-    d_tags = {}
-    for tag in d_soup.find_all(True):
-        d_tags[tag.name] = d_tags.get(tag.name, 0) + 1
+    # Compare tag counts
+    t_tags = {}
+    for tag in t_soup.find_all(True):
+        t_tags[tag.name] = t_tags.get(tag.name, 0) + 1
+    b_tags = {}
+    for tag in b_soup.find_all(True):
+        b_tags[tag.name] = b_tags.get(tag.name, 0) + 1
 
-    all_tag_names = set(j_tags) | set(d_tags)
-    for tag_name in sorted(all_tag_names):
-        j_count = j_tags.get(tag_name, 0)
-        d_count = d_tags.get(tag_name, 0)
-        if j_count != d_count:
-            diffs.append(f"Tag <{tag_name}> count: Jinja2={j_count} vs DTL={d_count}")
+    for tag_name in sorted(set(t_tags) | set(b_tags)):
+        t_count = t_tags.get(tag_name, 0)
+        b_count = b_tags.get(tag_name, 0)
+        if t_count != b_count:
+            diffs.append(f"<{tag_name}> count: {label}={t_count} vs baseline={b_count}")
 
-    # Compare IDs present
-    j_ids = {tag["id"] for tag in j_soup.find_all(id=True)}
-    d_ids = {tag["id"] for tag in d_soup.find_all(id=True)}
-    missing_ids = d_ids - j_ids
-    extra_ids = j_ids - d_ids
-    if missing_ids:
-        diffs.append(f"IDs missing in Jinja2: {missing_ids}")
-    if extra_ids:
-        diffs.append(f"IDs extra in Jinja2: {extra_ids}")
+    # Compare IDs
+    t_ids = {tag["id"] for tag in t_soup.find_all(id=True)}
+    b_ids = {tag["id"] for tag in b_soup.find_all(id=True)}
+    if b_ids - t_ids:
+        diffs.append(f"IDs missing in {label}: {b_ids - t_ids}")
+    if t_ids - b_ids:
+        diffs.append(f"IDs extra in {label}: {t_ids - b_ids}")
 
-    # Compare form inputs (name attributes)
-    j_inputs = {inp.get("name") for inp in j_soup.find_all(["input", "select", "textarea"]) if inp.get("name")}
-    d_inputs = {inp.get("name") for inp in d_soup.find_all(["input", "select", "textarea"]) if inp.get("name")}
-    missing_inputs = d_inputs - j_inputs
-    extra_inputs = j_inputs - d_inputs
-    if missing_inputs:
-        diffs.append(f"Form inputs missing in Jinja2: {missing_inputs}")
-    if extra_inputs:
-        diffs.append(f"Form inputs extra in Jinja2: {extra_inputs}")
+    # Compare form inputs
+    t_inputs = {inp.get("name") for inp in t_soup.find_all(["input", "select", "textarea"]) if inp.get("name")}
+    b_inputs = {inp.get("name") for inp in b_soup.find_all(["input", "select", "textarea"]) if inp.get("name")}
+    if b_inputs - t_inputs:
+        diffs.append(f"Form inputs missing in {label}: {b_inputs - t_inputs}")
+    if t_inputs - b_inputs:
+        diffs.append(f"Form inputs extra in {label}: {t_inputs - b_inputs}")
 
     return diffs
 
@@ -190,34 +187,37 @@ def compare_renders(jinja2_html: str, dtl_html: str) -> list[str]:
 # --- Test helpers ---
 
 
+def _render_with(client, path: str, templates: list) -> str:
+    """Render a URL with the given TEMPLATES setting, return HTML."""
+    with override_settings(TEMPLATES=templates):
+        response = client.get(path)
+        assert response.status_code == 200, f"Render failed for {path}: {response.status_code}"
+        return response.content.decode()
+
+
 class RenderParityMixin:
-    """Mixin that provides render_both() to get Jinja2 and DTL output for the same URL."""
+    """Mixin providing assert_parity() that compares both Jinja2 and DTL against Django's originals."""
 
-    def render_both(self, path: str) -> tuple[str, str]:
-        """Render a URL with our Jinja2 and Django's original DTL, return both."""
-        with override_settings(TEMPLATES=JINJA2_ADMINX):
-            j_response = self.client.get(path)  # type: ignore[attr-defined]
-            assert j_response.status_code == 200, f"Jinja2 render failed for {path}: {j_response.status_code}"
-            j_html = j_response.content.decode()
+    def assert_parity(self, path: str) -> None:
+        """Assert that both our Jinja2 AND DTL renders match Django's original."""
+        baseline = _render_with(self.client, path, DJANGO_ORIGINAL_DTL)  # type: ignore[attr-defined]
+        jinja2_html = _render_with(self.client, path, JINJA2_ADMINX)  # type: ignore[attr-defined]
+        dtl_html = _render_with(self.client, path, DTL_ADMINX)  # type: ignore[attr-defined]
 
-        with override_settings(TEMPLATES=DJANGO_ORIGINAL_DTL):
-            d_response = self.client.get(path)  # type: ignore[attr-defined]
-            assert d_response.status_code == 200, f"Django DTL render failed for {path}: {d_response.status_code}"
-            d_html = d_response.content.decode()
+        all_diffs = []
 
-        return j_html, d_html
+        jinja2_diffs = compare_renders(jinja2_html, baseline, label="jinja2")
+        if jinja2_diffs:
+            all_diffs.append("Jinja2 vs Django original:")
+            all_diffs.extend(f"  - {d}" for d in jinja2_diffs)
 
-    def assert_parity(self, path: str, *, allow_diffs: list[str] | None = None) -> None:
-        """Assert that Jinja2 and DTL renders match for the given URL."""
-        j_html, d_html = self.render_both(path)
-        diffs = compare_renders(j_html, d_html)
+        dtl_diffs = compare_renders(dtl_html, baseline, label="dtl")
+        if dtl_diffs:
+            all_diffs.append("DTL copy vs Django original:")
+            all_diffs.extend(f"  - {d}" for d in dtl_diffs)
 
-        # Filter out known/allowed differences
-        if allow_diffs:
-            diffs = [d for d in diffs if not any(allowed in d for allowed in allow_diffs)]
-
-        if diffs:
-            msg = f"Render parity failed for {path}:\n" + "\n".join(f"  - {d}" for d in diffs)
+        if all_diffs:
+            msg = f"Render parity failed for {path}:\n" + "\n".join(all_diffs)
             raise AssertionError(msg)
 
 
