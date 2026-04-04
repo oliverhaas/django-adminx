@@ -10,6 +10,7 @@ import jinja2
 from django.templatetags.static import static
 from django.urls import NoReverseMatch, reverse
 from django.utils.dateformat import format as dateformat
+from django.utils.encoding import iri_to_uri
 from django.utils.formats import date_format, localize
 from django.utils.html import conditional_escape
 from django.utils.text import Truncator, capfirst
@@ -99,6 +100,7 @@ def environment(**options: object) -> jinja2.Environment:
             "admin_urlname": _admin_urlname,
             "admin_urlquote": _admin_urlquote,
             "capfirst": capfirst,
+            "iriencode": _iriencode,
             "cell_count": cell_count,
             "date": _date_filter,
             "truncatewords": _truncatewords,
@@ -167,38 +169,54 @@ def _admin_urlname(value: Any, arg: str) -> str:  # noqa: ANN401
     return "admin:%s_%s_%s" % (value.app_label, value.model_name, arg)  # noqa: UP031
 
 
-def _admin_urlquote(value: str) -> str:
+def _admin_urlquote(value: object) -> str:
     """URL-encode a value for use in admin URLs."""
-    return quote(value)
+    return quote(str(value))
+
+
+def _iriencode(value: str) -> str:
+    """Port of Django's ``iriencode`` template filter."""
+    return iri_to_uri(value)
+
+
+def _jinja2_context_to_dict(context: Any) -> dict[str, Any]:  # noqa: ANN401
+    """Convert a Jinja2 Context (immutable) to a plain dict for Django templatetags."""
+    if isinstance(context, dict):
+        return context
+    return dict(context)
 
 
 @jinja2.pass_context
-def _admin_actions_jinja2(context: dict[str, Any]) -> dict[str, Any]:
+def _admin_actions_jinja2(context: Any) -> dict[str, Any]:  # noqa: ANN401
     """Jinja2 wrapper for admin_actions that auto-injects context."""
-    return _raw_admin_actions(context)
+    ctx = _jinja2_context_to_dict(context)
+    return _raw_admin_actions(ctx)
 
 
 @jinja2.pass_context
-def _submit_row_jinja2(context: dict[str, Any]) -> dict[str, Any]:
+def _submit_row_jinja2(context: Any) -> dict[str, Any]:  # noqa: ANN401
     """Jinja2 wrapper for submit_row that auto-injects context."""
-    return _raw_submit_row(context)
+    ctx = _jinja2_context_to_dict(context)
+    return _raw_submit_row(ctx)
 
 
 @jinja2.pass_context
-def _prepopulated_fields_js_jinja2(context: dict[str, Any]) -> dict[str, Any]:
+def _prepopulated_fields_js_jinja2(context: Any) -> dict[str, Any]:  # noqa: ANN401
     """Jinja2 wrapper for prepopulated_fields_js that auto-injects context."""
-    return _raw_prepopulated_fields_js(context)
+    ctx = _jinja2_context_to_dict(context)
+    return _raw_prepopulated_fields_js(ctx)
 
 
 @jinja2.pass_context
 def _add_preserved_filters_jinja2(
-    context: dict[str, Any],
+    context: Any,  # noqa: ANN401
     url: str,
     popup: bool = False,  # noqa: FBT001,FBT002
     to_field: str | None = None,
 ) -> str:
     """Jinja2 wrapper for add_preserved_filters that auto-injects context."""
-    return _raw_add_preserved_filters(context, url, popup, to_field)
+    ctx = _jinja2_context_to_dict(context)
+    return _raw_add_preserved_filters(ctx, url, popup, to_field)
 
 
 def _urlencode_path(value: str) -> str:
