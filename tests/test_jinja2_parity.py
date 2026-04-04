@@ -1,13 +1,14 @@
-"""Render-parity tests: verify Jinja2 admin output matches DTL output.
+"""Render-parity tests: verify django-adminx output matches django.contrib.admin.
 
-Each test renders an admin view twice — once via Jinja2 (our templates),
-once via DTL (Django's stock templates) — then compares the normalized HTML.
-Differences indicate conversion bugs.
+Each test renders an admin view twice — once via our Jinja2 templates,
+once via Django's *original* DTL templates (from the django package) —
+then compares the normalized HTML. Differences indicate conversion bugs.
 """
 
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 from bs4 import BeautifulSoup
 from django.contrib.auth.models import User
@@ -15,9 +16,15 @@ from django.test import TestCase, override_settings
 
 from tests.testapp.models import Article
 
+# Path to Django's original admin templates (the baseline we compare against)
+_DJANGO_ADMIN_TEMPLATES = str(
+    Path(__import__("django.contrib.admin", fromlist=["admin"]).__file__).parent / "templates",
+)
+
 # --- Template backend configurations ---
 
-JINJA2_FIRST = [
+# Our Jinja2 templates (what we're testing)
+JINJA2_ADMINX = [
     {
         "BACKEND": "django.template.backends.jinja2.Jinja2",
         "DIRS": [],
@@ -45,10 +52,12 @@ JINJA2_FIRST = [
     },
 ]
 
-DTL_ONLY = [
+# Django's original DTL templates (the baseline).
+# DIRS is listed before APP_DIRS, so Django's originals win over ours.
+DJANGO_ORIGINAL_DTL = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [_DJANGO_ADMIN_TEMPLATES],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -185,15 +194,15 @@ class RenderParityMixin:
     """Mixin that provides render_both() to get Jinja2 and DTL output for the same URL."""
 
     def render_both(self, path: str) -> tuple[str, str]:
-        """Render a URL with Jinja2 and DTL backends, return both HTML strings."""
-        with override_settings(TEMPLATES=JINJA2_FIRST):
+        """Render a URL with our Jinja2 and Django's original DTL, return both."""
+        with override_settings(TEMPLATES=JINJA2_ADMINX):
             j_response = self.client.get(path)  # type: ignore[attr-defined]
             assert j_response.status_code == 200, f"Jinja2 render failed for {path}: {j_response.status_code}"
             j_html = j_response.content.decode()
 
-        with override_settings(TEMPLATES=DTL_ONLY):
+        with override_settings(TEMPLATES=DJANGO_ORIGINAL_DTL):
             d_response = self.client.get(path)  # type: ignore[attr-defined]
-            assert d_response.status_code == 200, f"DTL render failed for {path}: {d_response.status_code}"
+            assert d_response.status_code == 200, f"Django DTL render failed for {path}: {d_response.status_code}"
             d_html = d_response.content.decode()
 
         return j_html, d_html
