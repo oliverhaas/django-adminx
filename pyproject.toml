@@ -61,6 +61,7 @@ include = ["django_adminx", "LICENSE", "README.md"]
 target-version = "py313"
 line-length = 120
 fix = true
+extend-exclude = ["examples"]
 
 [tool.ruff.lint]
 select = ["ALL"]
