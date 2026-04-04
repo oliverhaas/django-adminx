@@ -23,7 +23,9 @@ from django_adminx.templatetags.admin_list import (
     admin_actions as _raw_admin_actions,
 )
 from django_adminx.templatetags.admin_list import (
-    admin_list_filter,
+    admin_list_filter as _raw_admin_list_filter,
+)
+from django_adminx.templatetags.admin_list import (
     date_hierarchy,
     pagination,
     paginator_number,
@@ -63,6 +65,14 @@ def environment(**options: object) -> jinja2.Environment:
     """
     env = jinja2.Environment(**options)  # type: ignore[arg-type]  # noqa: S701
     env.add_extension("jinja2.ext.i18n")
+
+    # Make Django's SafeString recognized as safe by Jinja2's autoescaper.
+    # Jinja2 checks hasattr(value, '__html__') to skip escaping.
+    # Django's SafeString doesn't have __html__, so we add it.
+    from django.utils.safestring import SafeData  # noqa: PLC0415
+
+    if not hasattr(SafeData, "__html__"):
+        SafeData.__html__ = str  # type: ignore[assignment]
     env.install_gettext_callables(gettext, ngettext, newstyle=True)  # type: ignore[attr-defined]
 
     env.globals.update(
@@ -78,7 +88,7 @@ def environment(**options: object) -> jinja2.Environment:
             "select_admin_template": select_admin_template,
             # admin_list templatetag functions (context-aware wrappers)
             "admin_actions": _admin_actions_jinja2,
-            "admin_list_filter": admin_list_filter,
+            "admin_list_filter": _admin_list_filter_safe,
             "date_hierarchy": date_hierarchy,
             "pagination": pagination,
             "paginator_number": paginator_number,
@@ -99,7 +109,7 @@ def environment(**options: object) -> jinja2.Environment:
         {
             "admin_urlname": _admin_urlname,
             "admin_urlquote": _admin_urlquote,
-            "capfirst": capfirst,
+            "capfirst": _capfirst_safe,
             "iriencode": _iriencode,
             "cell_count": cell_count,
             "date": _date_filter,
@@ -172,6 +182,19 @@ def _admin_urlname(value: Any, arg: str) -> str:  # noqa: ANN401
 def _admin_urlquote(value: object) -> str:
     """URL-encode a value for use in admin URLs."""
     return quote(str(value))
+
+
+def _admin_list_filter_safe(cl: Any, spec: Any) -> Markup:  # noqa: ANN401
+    """Wrap admin_list_filter to return Markup so Jinja2 doesn't escape it."""
+    return Markup(_raw_admin_list_filter(cl, spec))  # noqa: S704
+
+
+def _capfirst_safe(value: object) -> str | Markup:
+    """capfirst that preserves Markup/SafeString safety."""
+    result = capfirst(str(value)) if value else ""
+    if hasattr(value, "__html__"):
+        return Markup(result)  # noqa: S704
+    return result
 
 
 def _iriencode(value: str) -> str:

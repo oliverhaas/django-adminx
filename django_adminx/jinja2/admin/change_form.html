@@ -70,6 +70,7 @@
 
 {% block inline_field_sets %}
 {% for inline_admin_formset in inline_admin_formsets %}
+    {% set inline_is_last = loop.last %}
     {% include inline_admin_formset.opts.template %}
 {% endfor %}
 {% endblock %}
