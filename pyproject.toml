@@ -44,6 +44,7 @@ dev = [
   "pytest-xdist==3.8.0",
   "Jinja2>=3.1",
   "ruff==0.15.8",
+  "beautifulsoup4>=4.14.3",
 ]
 docs = ["mike==2.1.4", "mkdocs==1.6.1", "mkdocs-material==9.7.6"]
 
@@ -98,6 +99,9 @@ ignore = ["COM812", "D", "E501", "EM", "TRY003"]
   "PT013",
   "PT018",
   "RUF012",
+  "B905",
+  "C901",
+  "RET504",
   "RUF059",
   "S101",
   "S105",
