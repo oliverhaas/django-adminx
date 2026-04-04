@@ -276,3 +276,111 @@ The Jinja2 environment must register:
 **Filters:** `capfirst`, `yesno`, `admin_urlname`, `admin_urlquote`, `urlencode_path`, `cell_count`, `date`, `truncatewords`, `unlocalize`, `unordered_list`
 
 **Injected by Django's Jinja2 backend (not in environment):** `csrf_input`, `csrf_token`, `request`, context processor output
+
+## Critical Gotchas (Learned the Hard Way)
+
+### 1. DTL Auto-Calls Methods; Jinja2 Does Not
+
+This is the single biggest source of bugs. In DTL, `{{ obj.method }}` automatically calls `method()` if it's callable. In Jinja2, it renders the bound method object as a string like `<bound method Foo.bar of ...>`.
+
+**Every method reference in DTL templates must have `()` added in Jinja2.**
+
+Common offenders in Django admin:
+```
+DTL:    {{ field.label_tag }}          → Jinja2: {{ field.label_tag() }}
+DTL:    {{ field.errors }}             → Jinja2: {{ field.errors() }}
+DTL:    {{ field.contents }}           → Jinja2: {{ field.contents() }}
+DTL:    {{ line.errors }}              → Jinja2: {{ line.errors() }}
+DTL:    {{ form.non_field_errors }}    → Jinja2: {{ form.non_field_errors() }}
+DTL:    {{ formset.non_form_errors }}  → Jinja2: {{ formset.non_form_errors() }}
+DTL:    {{ obj.pk_field.field }}       → Jinja2: {{ obj.pk_field().field }}
+DTL:    {{ obj.fk_field.field }}       → Jinja2: {{ obj.fk_field().field }}
+DTL:    {{ obj.deletion_field.field }} → Jinja2: {{ obj.deletion_field().field }}
+DTL:    {{ field.field.errors.as_ul }} → Jinja2: {{ field.field.errors.as_ul() }}
+DTL:    {{ form.errors.items }}        → Jinja2: {{ form.errors.items() }}
+```
+
+**Note:** Properties (like `BoundField.errors`) do NOT need `()` — only methods do. The tricky part is knowing which is which. Django admin helper classes (`AdminField`, `AdminReadonlyField`, `Fieldline`, `InlineAdminForm`) use methods where you'd expect properties.
+
+**Automation hint:** A converter tool should inspect the Python classes to determine which attributes are methods vs properties, or conservatively add `()` to all callable attributes.
+
+### 2. Django's `mark_safe()` Is Not Recognized by Jinja2
+
+Django's `SafeString` (from `mark_safe()`) does NOT have `__html__()`, which Jinja2 uses to detect pre-escaped HTML. Without a fix, all `mark_safe()` output gets double-escaped.
+
+**Fix:** Patch `SafeData.__html__ = str` in the Jinja2 environment factory:
+```python
+from django.utils.safestring import SafeData
+if not hasattr(SafeData, "__html__"):
+    SafeData.__html__ = str
+```
+
+### 3. Filters That Strip Safety
+
+Django's `capfirst()` returns a plain `str` even when given a `SafeString`. This means `{{ value|capfirst }}` escapes HTML that was previously safe.
+
+**Fix:** Wrap filters to preserve `Markup` status:
+```python
+def capfirst_safe(value):
+    result = capfirst(str(value)) if value else ""
+    if hasattr(value, "__html__"):
+        return Markup(result)
+    return result
+```
+
+### 4. Functions That Return Rendered HTML
+
+Django's `admin_list_filter(cl, spec)` uses `get_template().render()` internally, returning a plain `str` of HTML (not `SafeString`). Jinja2 escapes it.
+
+**Fix:** Wrap such functions to return `Markup`:
+```python
+def admin_list_filter_safe(cl, spec):
+    return Markup(raw_admin_list_filter(cl, spec))
+```
+
+### 5. Context-Aware Tags Need `@jinja2.pass_context`
+
+Django's `takes_context=True` tags (like `submit_row`, `admin_actions`, `add_preserved_filters`) receive the template context as their first argument. In Jinja2, use `@jinja2.pass_context`:
+
+```python
+@jinja2.pass_context
+def submit_row_jinja2(context):
+    # Jinja2's context is immutable — convert to dict first
+    ctx = dict(context)
+    return raw_submit_row(ctx)
+```
+
+**Important:** Jinja2's `Context` object is immutable. Functions that mutate context (like `admin_actions` which does `context["action_index"] += 1`) will crash with `TypeError: 'Context' object does not support item assignment`. Always convert to a plain `dict` first.
+
+### 6. `loop` Variable Not Available in `{% include %}`
+
+Jinja2 does NOT pass the `loop` variable from a `{% for %}` block into `{% include %}`d templates. This is different from DTL where `forloop` is part of the context.
+
+**Fix:** Set the needed values as regular variables before the include:
+```jinja2
+{# WRONG — loop is undefined inside included template #}
+{% for item in items %}
+    {% include "child.html" %}
+{% endfor %}
+
+{# CORRECT — pass loop info explicitly #}
+{% for item in items %}
+    {% set is_last = loop.last %}
+    {% include "child.html" %}
+{% endfor %}
+```
+
+### 7. Block Names Cannot Contain Hyphens
+
+DTL allows `{% block nav-sidebar %}`. Jinja2 does not — block names must be valid Python identifiers.
+
+**Fix:** Replace hyphens with underscores:
+```
+DTL:    {% block nav-sidebar %}    → Jinja2: {% block nav_sidebar %}
+DTL:    {% block object-tools %}   → Jinja2: {% block object_tools %}
+DTL:    {% block dark-mode-vars %} → Jinja2: {% block dark_mode_vars %}
+```
+
+### 8. Static Files Need to Be Bundled
+
+If replacing `django.contrib.admin` entirely, static files (`admin/css/`, `admin/js/`, `admin/img/`) must be copied into the replacement package. Django's `staticfiles` finders only search `INSTALLED_APPS` directories.
