@@ -1,0 +1,16 @@
+{% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+<a href="{{ url('admin:index') }}">{{ gettext('Home') }}</a>
+&rsaquo; {{ gettext('Server error') }}
+</div>
+{% endblock %}
+
+{% block title %}{{ gettext('Server error (500)') }}{% endblock %}
+
+{% block content %}
+<h1>{{ gettext('Server Error <em>(500)</em>') }}</h1>
+<p>{{ gettext("There's been an error. It's been reported to the site administrators via email and should be fixed shortly. Thanks for your patience.") }}</p>
+
+{% endblock %}

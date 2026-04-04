@@ -1,0 +1,8 @@
+<button class="sticky toggle-nav-sidebar" id="toggle-nav-sidebar" aria-label="{{ gettext('Toggle navigation') }}"></button>
+<nav class="sticky" id="nav-sidebar" aria-label="{{ gettext('Sidebar') }}">
+  <input type="search" id="nav-filter"
+         placeholder="{{ gettext('Start typing to filter…') }}"
+         aria-label="{{ gettext('Filter navigation items') }}">
+  {% set app_list = available_apps %}{% set show_changelinks = False %}
+  {% include 'admin/app_list.html' %}
+</nav>

@@ -1,0 +1,50 @@
+{% extends "admin/base_site.html" %}
+
+{% block extrastyle %}{{ super() }}<link rel="stylesheet" href="{{ static('admin/css/dashboard.css') }}">{% endblock %}
+
+{% block coltype %}colMS{% endblock %}
+
+{% block bodyclass %}{{ super() }} dashboard{% endblock %}
+
+{% block nav_breadcrumbs %}{% endblock %}
+
+{% block nav_sidebar %}{% endblock %}
+
+{% block content %}
+<div id="content-main" class="app-list">
+  {% set show_changelinks = True %}
+  {% include "admin/app_list.html" %}
+</div>
+{% endblock %}
+
+{% block sidebar %}
+<div id="content-related">
+    <div class="module" id="recent-actions-module">
+        <h2>{{ gettext('Recent actions') }}</h2>
+        <h3>{{ gettext('My actions') }}</h3>
+            {% set admin_log = get_admin_log(10, user) %}
+            {% if not admin_log %}
+            <p>{{ gettext('None available') }}</p>
+            {% else %}
+            <ul class="actionlist">
+            {% for entry in admin_log %}
+            <li class="{% if entry.is_addition %}addlink{% endif %}{% if entry.is_change %}changelink{% endif %}{% if entry.is_deletion %}deletelink{% endif %}">
+                <span class="visually-hidden">{% if entry.is_addition %}{{ gettext('Added:') }}{% elif entry.is_change %}{{ gettext('Changed:') }}{% elif entry.is_deletion %}{{ gettext('Deleted:') }}{% endif %}</span>
+                {% if entry.is_deletion or not entry.get_admin_url %}
+                    {{ entry.object_repr }}
+                {% else %}
+                    <a href="{{ entry.get_admin_url }}">{{ entry.object_repr }}</a>
+                {% endif %}
+                <br>
+                {% if entry.content_type %}
+                    <span class="mini quiet">{{ entry.content_type.name|capfirst }}</span>
+                {% else %}
+                    <span class="mini quiet">{{ gettext('Unknown content') }}</span>
+                {% endif %}
+            </li>
+            {% endfor %}
+            </ul>
+            {% endif %}
+    </div>
+</div>
+{% endblock %}

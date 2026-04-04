@@ -1,0 +1,68 @@
+{% extends "admin/base_site.html" %}
+
+{% block title %}{% if form.errors %}{{ gettext("Error:") }} {% endif %}{{ super() }}{% endblock %}
+{% block extrastyle %}{{ super() }}<link rel="stylesheet" href="{{ static('admin/css/login.css') }}">
+{{ form.media }}
+{% endblock %}
+
+{% block bodyclass %}{{ super() }} login{% endblock %}
+
+{% block usertools %}{% endblock %}
+
+{% block nav_global %}{% endblock %}
+
+{% block nav_sidebar %}{% endblock %}
+
+{% block content_title %}{% endblock %}
+
+{% block nav_breadcrumbs %}{% endblock %}
+
+{% block content %}
+{% if form.errors and not form.non_field_errors() %}
+<p class="errornote">
+{% trans count=form.errors.items()|length %}Please correct the error below.{% pluralize %}Please correct the errors below.{% endtrans %}
+</p>
+{% endif %}
+
+{% if form.non_field_errors() %}
+{% for error in form.non_field_errors() %}
+<p class="errornote">
+    {{ error }}
+</p>
+{% endfor %}
+{% endif %}
+
+<div id="content-main">
+
+{% if user.is_authenticated %}
+<p class="errornote">
+{% trans username=user.get_username() %}
+    You are authenticated as {{ username }}, but are not authorized to
+    access this page. Would you like to login to a different account?
+{% endtrans %}
+</p>
+{% endif %}
+
+<form action="{{ app_path }}" method="post" id="login-form">{{ csrf_input }}
+  <div class="form-row">
+    {{ form.username.errors }}
+    {{ form.username.label_tag() }} {{ form.username }}
+  </div>
+  <div class="form-row">
+    {{ form.password.errors }}
+    {{ form.password.label_tag() }} {{ form.password }}
+    <input type="hidden" name="next" value="{{ next }}">
+  </div>
+  {% set password_reset_url = url('admin_password_reset', silent=True) %}
+  {% if password_reset_url %}
+  <div class="password-reset-link">
+    <a href="{{ password_reset_url }}">{{ gettext('Forgotten your login credentials?') }}</a>
+  </div>
+  {% endif %}
+  <div class="submit-row">
+    <input type="submit" value="{{ gettext('Log in') }}">
+  </div>
+</form>
+
+</div>
+{% endblock %}

@@ -261,9 +261,15 @@ dependencies = [
     { name = "django" },
 ]
 
+[package.optional-dependencies]
+jinja2 = [
+    { name = "jinja2" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "django-stubs" },
+    { name = "jinja2" },
     { name = "mypy" },
     { name = "pre-commit" },
     { name = "pytest" },
@@ -279,11 +285,16 @@ docs = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "django", specifier = ">=5.2,<7" }]
+requires-dist = [
+    { name = "django", specifier = ">=5.2,<7" },
+    { name = "jinja2", marker = "extra == 'jinja2'", specifier = ">=3.1" },
+]
+provides-extras = ["jinja2"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "django-stubs", specifier = "==6.0.1" },
+    { name = "jinja2", specifier = ">=3.1" },
     { name = "mypy", specifier = "==1.19.1" },
     { name = "pre-commit", specifier = "==4.5.1" },
     { name = "pytest", specifier = "==9.0.2" },

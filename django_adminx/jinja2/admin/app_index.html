@@ -1,0 +1,19 @@
+{% extends "admin/index.html" %}
+
+{% block bodyclass %}{{ super() }} app-{{ app_label }}{% endblock %}
+
+{% if not is_popup %}
+{% block nav_breadcrumbs %}
+  <nav aria-label="{{ gettext('Breadcrumbs') }}">
+    <div class="breadcrumbs">
+      <a href="{{ url('admin:index') }}">{{ gettext('Home') }}</a>
+      &rsaquo;
+      {% for app in app_list %}
+        {{ app.name }}
+      {% endfor %}
+    </div>
+  </nav>
+{% endblock %}
+{% endif %}
+
+{% block sidebar %}{% endblock %}
