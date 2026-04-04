@@ -53,7 +53,7 @@
     <p class="errornote">
     {% trans count=errors|length %}Please correct the error below.{% pluralize %}Please correct the errors below.{% endtrans %}
     </p>
-    {{ adminform.form.non_field_errors }}
+    {{ adminform.form.non_field_errors() }}
 {% endif %}
 
 {% block field_sets %}
