@@ -102,7 +102,7 @@
 
           {% block result_list %}
             {% if action_form and actions_on_top and cl.show_admin_actions %}
-              {% set _actions_ctx = admin_actions(context) %}
+              {% set _actions_ctx = admin_actions() %}
               {% set action_index = _actions_ctx.action_index %}
               {% include "admin/actions.html" %}
             {% endif %}
@@ -113,7 +113,7 @@
             {% set results = _rl.results %}
             {% include "admin/change_list_results.html" %}
             {% if action_form and actions_on_bottom and cl.show_admin_actions %}
-              {% set _actions_ctx = admin_actions(context) %}
+              {% set _actions_ctx = admin_actions() %}
               {% set action_index = _actions_ctx.action_index %}
               {% include "admin/actions.html" %}
             {% endif %}

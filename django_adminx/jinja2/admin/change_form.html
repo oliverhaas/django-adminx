@@ -39,7 +39,7 @@
 {% if is_popup %}<input type="hidden" name="{{ is_popup_var }}" value="1">{% endif %}
 {% if to_field %}<input type="hidden" name="{{ to_field_var }}" value="{{ to_field }}">{% endif %}
 {% if save_on_top %}{% block submit_buttons_top %}
-  {% set _sr = submit_row(context) %}
+  {% set _sr = submit_row() %}
   {% set can_change = _sr.can_change %}
   {% set show_delete_link = _sr.show_delete_link %}
   {% set show_save_as_new = _sr.show_save_as_new %}
@@ -77,7 +77,7 @@
 {% block after_related_objects %}{% endblock %}
 
 {% block submit_buttons_bottom %}
-  {% set _sr = submit_row(context) %}
+  {% set _sr = submit_row() %}
   {% set can_change = _sr.can_change %}
   {% set show_delete_link = _sr.show_delete_link %}
   {% set show_save_as_new = _sr.show_save_as_new %}
@@ -99,7 +99,7 @@
 {% endblock %}
 
 {# JavaScript for prepopulated fields #}
-{% set _pp = prepopulated_fields_js(context) %}
+{% set _pp = prepopulated_fields_js() %}
 {% set prepopulated_fields = _pp.prepopulated_fields %}
 {% set prepopulated_fields_json = _pp.prepopulated_fields_json %}
 {% include "admin/prepopulated_fields_js.html" %}

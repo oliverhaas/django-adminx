@@ -19,7 +19,9 @@ from markupsafe import Markup
 from django_adminx.jinja2_helpers import select_admin_template
 from django_adminx.models import LogEntry
 from django_adminx.templatetags.admin_list import (
-    admin_actions,
+    admin_actions as _raw_admin_actions,
+)
+from django_adminx.templatetags.admin_list import (
     admin_list_filter,
     date_hierarchy,
     pagination,
@@ -32,10 +34,16 @@ from django_adminx.templatetags.admin_list import (
 )
 from django_adminx.templatetags.admin_modify import (
     cell_count,
-    prepopulated_fields_js,
-    submit_row,
 )
-from django_adminx.templatetags.admin_urls import add_preserved_filters
+from django_adminx.templatetags.admin_modify import (
+    prepopulated_fields_js as _raw_prepopulated_fields_js,
+)
+from django_adminx.templatetags.admin_modify import (
+    submit_row as _raw_submit_row,
+)
+from django_adminx.templatetags.admin_urls import (
+    add_preserved_filters as _raw_add_preserved_filters,
+)
 
 
 def environment(**options: object) -> jinja2.Environment:
@@ -67,8 +75,8 @@ def environment(**options: object) -> jinja2.Environment:
             "url": _url,
             # Template hierarchy helper
             "select_admin_template": select_admin_template,
-            # admin_list templatetag functions
-            "admin_actions": admin_actions,
+            # admin_list templatetag functions (context-aware wrappers)
+            "admin_actions": _admin_actions_jinja2,
             "admin_list_filter": admin_list_filter,
             "date_hierarchy": date_hierarchy,
             "pagination": pagination,
@@ -78,11 +86,11 @@ def environment(**options: object) -> jinja2.Environment:
             "result_list": result_list,
             "results": results,
             "search_form": search_form,
-            # admin_modify templatetag functions
-            "prepopulated_fields_js": prepopulated_fields_js,
-            "submit_row": submit_row,
+            # admin_modify templatetag functions (context-aware wrappers)
+            "prepopulated_fields_js": _prepopulated_fields_js_jinja2,
+            "submit_row": _submit_row_jinja2,
             # admin_urls templatetag functions
-            "add_preserved_filters": add_preserved_filters,
+            "add_preserved_filters": _add_preserved_filters_jinja2,
         },
     )
 
@@ -162,6 +170,35 @@ def _admin_urlname(value: Any, arg: str) -> str:  # noqa: ANN401
 def _admin_urlquote(value: str) -> str:
     """URL-encode a value for use in admin URLs."""
     return quote(value)
+
+
+@jinja2.pass_context
+def _admin_actions_jinja2(context: dict[str, Any]) -> dict[str, Any]:
+    """Jinja2 wrapper for admin_actions that auto-injects context."""
+    return _raw_admin_actions(context)
+
+
+@jinja2.pass_context
+def _submit_row_jinja2(context: dict[str, Any]) -> dict[str, Any]:
+    """Jinja2 wrapper for submit_row that auto-injects context."""
+    return _raw_submit_row(context)
+
+
+@jinja2.pass_context
+def _prepopulated_fields_js_jinja2(context: dict[str, Any]) -> dict[str, Any]:
+    """Jinja2 wrapper for prepopulated_fields_js that auto-injects context."""
+    return _raw_prepopulated_fields_js(context)
+
+
+@jinja2.pass_context
+def _add_preserved_filters_jinja2(
+    context: dict[str, Any],
+    url: str,
+    popup: bool = False,  # noqa: FBT001,FBT002
+    to_field: str | None = None,
+) -> str:
+    """Jinja2 wrapper for add_preserved_filters that auto-injects context."""
+    return _raw_add_preserved_filters(context, url, popup, to_field)
 
 
 def _urlencode_path(value: str) -> str:
