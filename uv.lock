@@ -388,15 +388,15 @@ wheels = [
 
 [[package]]
 name = "django-stubs-ext"
-version = "6.0.8"
+version = "6.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "django" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b2/54/79c06f12606ca1d22510900a251aeee92b9d91f80385d62c0c493d54f00e/django_stubs_ext-6.0.8.tar.gz", hash = "sha256:a64c332fc2f907b3bfeed38f1751eff1cbb377873c834d875b4cb0fdb63a3782", size = 6843, upload-time = "2026-08-06T11:04:30.701Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e6/40/75dd6650c5fc345b9edaebe42085811096e31a502fdbe17a52ffb9640d03/django_stubs_ext-6.1.0.tar.gz", hash = "sha256:d5635a481f5bdf2e04d533a8b602d3b9a28f073deffc85b83048dd20032e4d20", size = 6848, upload-time = "2026-08-12T10:54:44.47Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e5/52/dd438b231490a6be853446b0bf32ec8a011ff4e386e7f8813659a2830664/django_stubs_ext-6.0.8-py3-none-any.whl", hash = "sha256:2214729fd9ebdc1c6ea4dde939db4c4b4b827473926dfe228f1588f7f637a9a2", size = 10401, upload-time = "2026-08-06T11:04:29.602Z" },
+    { url = "https://files.pythonhosted.org/packages/ed/41/10b8d576651af4f1dc6bdfb0d8a203e8b3a55d60ae36ba305d0edcdb594f/django_stubs_ext-6.1.0-py3-none-any.whl", hash = "sha256:57273506823274700a707c8f404dfb52a12c4554daf1468dfb2bff857bb22074", size = 10404, upload-time = "2026-08-12T10:54:42.979Z" },
 ]
 
 [[package]]
