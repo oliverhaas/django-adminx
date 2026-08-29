@@ -64,16 +64,26 @@ class ListFieldsMixin:
         if self.list_only_fields is not None:
             pk_name = self.opts.pk.name  # type: ignore[attr-defined]
             fields = {pk_name, *self.list_only_fields}
-            return qs.only(*fields)
-
-        if self.list_defer_fields is not None:
+            qs = qs.only(*fields)
+        elif self.list_defer_fields is not None:
             if not self.list_defer_fields:
                 return qs  # empty list = opt-out
-            return qs.defer(*self.list_defer_fields)
+            qs = qs.defer(*self.list_defer_fields)
+        else:
+            # Auto mode: resolve list_display to concrete fields
+            fields = self._resolve_list_display_fields()
+            qs = qs.only(*fields)
 
-        # Auto mode: resolve list_display to concrete fields
-        fields = self._resolve_list_display_fields()
-        return qs.only(*fields)
+        # Auto select_related for FK fields in list_display
+        list_select_related = getattr(self, "list_select_related", False)
+        if list_select_related is False:
+            # Auto-detect
+            select_related = self._resolve_select_related()
+            if select_related:
+                qs = qs.select_related(*select_related)
+        # If list_select_related is True or a list, Django/user handles it
+
+        return qs
 
     def _resolve_list_display_fields(self) -> set[str]:
         """Resolve ``list_display`` entries to concrete model field names."""
@@ -105,6 +115,27 @@ class ListFieldsMixin:
                     fields.add(entry)
 
         return fields
+
+    def _resolve_select_related(self) -> list[str]:
+        """Auto-detect FK fields in list_display that need select_related."""
+        related = []
+        for entry in self.list_display:  # type: ignore[attr-defined]
+            if not isinstance(entry, str):
+                continue
+            # Check for dotted paths like "category__name"
+            if "__" in entry:
+                prefix = entry.split("__")[0]
+                if prefix:  # skip entries like "__str__" that start with "__"
+                    related.append(prefix)
+                continue
+            # Check if it's a FK field
+            try:
+                field = self.opts.get_field(entry)  # type: ignore[attr-defined]
+            except Exception:  # noqa: BLE001, S112
+                continue
+            if hasattr(field, "is_relation") and field.is_relation and field.many_to_one:
+                related.append(entry)
+        return related
 
     def _is_changelist_request(self, request: HttpRequest) -> bool:
         """Return True when *request* targets the changelist (not add/change)."""
