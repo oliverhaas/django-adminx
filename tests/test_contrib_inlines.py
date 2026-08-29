@@ -54,13 +54,13 @@ class NonrelatedModelAdminChecksTest(TestCase):
         from django_admin_boost.admin.contrib.inlines.checks import NonrelatedModelAdminChecks
 
         checker = NonrelatedModelAdminChecks()
-        assert checker._check_relation(None, None) == []  # noqa: SLF001
+        assert checker._check_relation(None, None) == []
 
     def test_skips_exclude_of_parent_model_check(self) -> None:
         from django_admin_boost.admin.contrib.inlines.checks import NonrelatedModelAdminChecks
 
         checker = NonrelatedModelAdminChecks()
-        assert checker._check_exclude_of_parent_model(None, None) == []  # noqa: SLF001
+        assert checker._check_exclude_of_parent_model(None, None) == []
 
 
 class NonrelatedInlineFormSetTest(TestCase):

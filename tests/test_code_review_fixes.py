@@ -60,28 +60,28 @@ class UUIDFallbackDetectionTest(TestCase):
         request = self.factory.get("/admin/testapp/article/550e8400-e29b-41d4-a716-446655440000/change/")
         # Deliberately remove resolver_match to exercise fallback path
         request.resolver_match = None
-        result = self.model_admin._is_changelist_request(request)  # noqa: SLF001
+        result = self.model_admin._is_changelist_request(request)
         assert result is False, "UUID PK path should be detected as change view, not changelist"
 
     def test_uuid_pk_without_change_suffix_detected(self):
         """A URL ending with a UUID PK (no /change/ suffix) should be detected as a change view."""
         request = self.factory.get("/admin/testapp/article/550e8400-e29b-41d4-a716-446655440000/")
         request.resolver_match = None
-        result = self.model_admin._is_changelist_request(request)  # noqa: SLF001
+        result = self.model_admin._is_changelist_request(request)
         assert result is False, "URL ending with UUID PK should be detected as change view"
 
     def test_digit_pk_still_detected(self):
         """Numeric PKs should still be detected as change views in fallback."""
         request = self.factory.get("/admin/testapp/article/42/")
         request.resolver_match = None
-        result = self.model_admin._is_changelist_request(request)  # noqa: SLF001
+        result = self.model_admin._is_changelist_request(request)
         assert result is False
 
     def test_changelist_path_returns_true(self):
         """A changelist path should return True in fallback."""
         request = self.factory.get("/admin/testapp/article/")
         request.resolver_match = None
-        result = self.model_admin._is_changelist_request(request)  # noqa: SLF001
+        result = self.model_admin._is_changelist_request(request)
         assert result is True
 
 
