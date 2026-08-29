@@ -7,10 +7,11 @@ from typing import TYPE_CHECKING, Any
 
 from django.core.exceptions import ImproperlyConfigured
 
+from django_admin_boost.annotations import AnnotatedField
 from django_admin_boost.paginators import EstimatedCountPaginator
 
 if TYPE_CHECKING:
-    from django.db.models import QuerySet
+    from django.db.models import Expression, QuerySet
     from django.http import HttpRequest
 
 _UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE)
@@ -64,16 +65,29 @@ class ListFieldsMixin:
         if self.list_only_fields is not None:
             pk_name = self.opts.pk.name  # type: ignore[attr-defined]
             fields = {pk_name, *self.list_only_fields}
-            return qs.only(*fields)
-
-        if self.list_defer_fields is not None:
+            qs = qs.only(*fields)
+        elif self.list_defer_fields is not None:
             if not self.list_defer_fields:
-                return qs  # empty list = opt-out
-            return qs.defer(*self.list_defer_fields)
+                pass  # empty list = opt-out, no defer applied
+            else:
+                qs = qs.defer(*self.list_defer_fields)
+        else:
+            # Auto mode: resolve list_display to concrete fields
+            fields = self._resolve_list_display_fields()
+            qs = qs.only(*fields)
 
-        # Auto mode: resolve list_display to concrete fields
-        fields = self._resolve_list_display_fields()
-        return qs.only(*fields)
+        annotations = self._collect_annotated_fields()
+        if annotations:
+            qs = qs.annotate(**annotations)
+        return qs
+
+    def _collect_annotated_fields(self) -> dict[str, Expression]:
+        """Collect AnnotatedField instances from list_display."""
+        annotations: dict[str, Expression] = {}
+        for entry in self.list_display:  # type: ignore[attr-defined]
+            if isinstance(entry, AnnotatedField):
+                annotations[entry.name] = entry.expression
+        return annotations
 
     def _resolve_list_display_fields(self) -> set[str]:
         """Resolve ``list_display`` entries to concrete model field names."""
@@ -81,6 +95,9 @@ class ListFieldsMixin:
         fields = {pk_name}
 
         for entry in self.list_display:  # type: ignore[attr-defined]
+            if isinstance(entry, AnnotatedField):
+                # Handled by _collect_annotated_fields — not a concrete field
+                continue
             if entry == "__str__":
                 # __str__ contributes only pk
                 continue
