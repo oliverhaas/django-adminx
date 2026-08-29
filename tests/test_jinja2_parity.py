@@ -14,9 +14,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
 from bs4 import BeautifulSoup
 from django.contrib.auth.models import User
-from django.test import TestCase, override_settings
+from django.test import override_settings
 
 from tests.testapp.models import Article, Category
 
@@ -195,146 +196,134 @@ def _render_with(client, path: str, templates: list) -> str:
         return response.content.decode()
 
 
-class RenderParityMixin:
-    """Mixin providing assert_parity() that compares both Jinja2 and DTL against Django's originals."""
+def assert_parity(client, path: str) -> None:
+    """Assert that both our Jinja2 AND DTL renders match Django's original."""
+    baseline = _render_with(client, path, DJANGO_ORIGINAL_DTL)
+    jinja2_html = _render_with(client, path, JINJA2_ADMINX)
+    dtl_html = _render_with(client, path, DTL_ADMINX)
 
-    def assert_parity(self, path: str) -> None:
-        """Assert that both our Jinja2 AND DTL renders match Django's original."""
-        baseline = _render_with(self.client, path, DJANGO_ORIGINAL_DTL)  # type: ignore[attr-defined]
-        jinja2_html = _render_with(self.client, path, JINJA2_ADMINX)  # type: ignore[attr-defined]
-        dtl_html = _render_with(self.client, path, DTL_ADMINX)  # type: ignore[attr-defined]
+    all_diffs = []
 
-        all_diffs = []
+    jinja2_diffs = compare_renders(jinja2_html, baseline, label="jinja2")
+    if jinja2_diffs:
+        all_diffs.append("Jinja2 vs Django original:")
+        all_diffs.extend(f"  - {d}" for d in jinja2_diffs)
 
-        jinja2_diffs = compare_renders(jinja2_html, baseline, label="jinja2")
-        if jinja2_diffs:
-            all_diffs.append("Jinja2 vs Django original:")
-            all_diffs.extend(f"  - {d}" for d in jinja2_diffs)
+    dtl_diffs = compare_renders(dtl_html, baseline, label="dtl")
+    if dtl_diffs:
+        all_diffs.append("DTL copy vs Django original:")
+        all_diffs.extend(f"  - {d}" for d in dtl_diffs)
 
-        dtl_diffs = compare_renders(dtl_html, baseline, label="dtl")
-        if dtl_diffs:
-            all_diffs.append("DTL copy vs Django original:")
-            all_diffs.extend(f"  - {d}" for d in dtl_diffs)
-
-        if all_diffs:
-            msg = f"Render parity failed for {path}:\n" + "\n".join(all_diffs)
-            raise AssertionError(msg)
+    if all_diffs:
+        msg = f"Render parity failed for {path}:\n" + "\n".join(all_diffs)
+        raise AssertionError(msg)
 
 
 # --- Tests ---
 
 
-class LoginParityTest(RenderParityMixin, TestCase):
-    def test_login_page(self):
-        self.assert_parity("/admin/login/")
+def test_login_page(client):
+    assert_parity(client, "/admin/login/")
 
 
-class DashboardParityTest(RenderParityMixin, TestCase):
-    @classmethod
-    def setUpTestData(cls):
-        cls.superuser = User.objects.create_superuser(username="admin", password="password")
-
-    def setUp(self):
-        self.client.force_login(self.superuser)
-
-    def test_index(self):
-        self.assert_parity("/admin/")
-
-    def test_app_index(self):
-        self.assert_parity("/admin/testapp/")
-
-    def test_auth_app_index(self):
-        self.assert_parity("/admin/auth/")
+@pytest.fixture
+def parity_superuser(db):
+    return User.objects.create_superuser(username="admin", password="password")
 
 
-class ChangelistParityTest(RenderParityMixin, TestCase):
-    @classmethod
-    def setUpTestData(cls):
-        cls.superuser = User.objects.create_superuser(username="admin", password="password")
-        cat = Category.objects.create(name="Tech")
-        for i in range(5):
-            Article.objects.create(
-                title=f"Article {i}",
-                slug=f"article-{i}",
-                status="published" if i % 2 == 0 else "draft",
-                is_featured=i == 0,
-                priority=i,
-                category=cat if i % 2 == 0 else None,
-            )
-
-    def setUp(self):
-        self.client.force_login(self.superuser)
-
-    def test_changelist(self):
-        self.assert_parity("/admin/testapp/article/")
-
-    def test_changelist_search(self):
-        self.assert_parity("/admin/testapp/article/?q=Article")
-
-    def test_changelist_filter(self):
-        self.assert_parity("/admin/testapp/article/?status__exact=published")
-
-    def test_changelist_boolean_filter(self):
-        self.assert_parity("/admin/testapp/article/?is_featured__exact=1")
+def test_dashboard_index(client, parity_superuser):
+    client.force_login(parity_superuser)
+    assert_parity(client, "/admin/")
 
 
-class ChangeFormParityTest(RenderParityMixin, TestCase):
-    @classmethod
-    def setUpTestData(cls):
-        cls.superuser = User.objects.create_superuser(username="admin", password="password")
-        cat = Category.objects.create(name="Science")
-        cls.article = Article.objects.create(
-            title="Parity Test",
-            slug="parity-test",
-            status="draft",
-            category=cat,
-            is_featured=True,
-            priority=5,
+def test_dashboard_app_index(client, parity_superuser):
+    client.force_login(parity_superuser)
+    assert_parity(client, "/admin/testapp/")
+
+
+def test_dashboard_auth_app_index(client, parity_superuser):
+    client.force_login(parity_superuser)
+    assert_parity(client, "/admin/auth/")
+
+
+@pytest.fixture
+def parity_articles(db):
+    cat = Category.objects.create(name="Tech")
+    for i in range(5):
+        Article.objects.create(
+            title=f"Article {i}",
+            slug=f"article-{i}",
+            status="published" if i % 2 == 0 else "draft",
+            is_featured=i == 0,
+            priority=i,
+            category=cat if i % 2 == 0 else None,
         )
-
-    def setUp(self):
-        self.client.force_login(self.superuser)
-
-    def test_add_form(self):
-        self.assert_parity("/admin/testapp/article/add/")
-
-    def test_change_form(self):
-        self.assert_parity(f"/admin/testapp/article/{self.article.pk}/change/")
+    return cat
 
 
-class DeleteParityTest(RenderParityMixin, TestCase):
-    @classmethod
-    def setUpTestData(cls):
-        cls.superuser = User.objects.create_superuser(username="admin", password="password")
-        cls.article = Article.objects.create(title="Delete Me", slug="delete-me", status="draft")
-
-    def setUp(self):
-        self.client.force_login(self.superuser)
-
-    def test_delete_confirmation(self):
-        self.assert_parity(f"/admin/testapp/article/{self.article.pk}/delete/")
+def test_changelist(client, parity_superuser, parity_articles):
+    client.force_login(parity_superuser)
+    assert_parity(client, "/admin/testapp/article/")
 
 
-class HistoryParityTest(RenderParityMixin, TestCase):
-    @classmethod
-    def setUpTestData(cls):
-        cls.superuser = User.objects.create_superuser(username="admin", password="password")
-        cls.article = Article.objects.create(title="History Test", slug="history-test", status="draft")
-
-    def setUp(self):
-        self.client.force_login(self.superuser)
-
-    def test_history(self):
-        self.assert_parity(f"/admin/testapp/article/{self.article.pk}/history/")
+def test_changelist_search(client, parity_superuser, parity_articles):
+    client.force_login(parity_superuser)
+    assert_parity(client, "/admin/testapp/article/?q=Article")
 
 
-class PasswordChangeParityTest(RenderParityMixin, TestCase):
-    @classmethod
-    def setUpTestData(cls):
-        cls.superuser = User.objects.create_superuser(username="admin", password="password")
+def test_changelist_filter(client, parity_superuser, parity_articles):
+    client.force_login(parity_superuser)
+    assert_parity(client, "/admin/testapp/article/?status__exact=published")
 
-    def setUp(self):
-        self.client.force_login(self.superuser)
 
-    def test_password_change(self):
-        self.assert_parity("/admin/password_change/")
+def test_changelist_boolean_filter(client, parity_superuser, parity_articles):
+    client.force_login(parity_superuser)
+    assert_parity(client, "/admin/testapp/article/?is_featured__exact=1")
+
+
+@pytest.fixture
+def parity_article(db):
+    cat = Category.objects.create(name="Science")
+    return Article.objects.create(
+        title="Parity Test",
+        slug="parity-test",
+        status="draft",
+        category=cat,
+        is_featured=True,
+        priority=5,
+    )
+
+
+def test_add_form(client, parity_superuser, parity_article):
+    client.force_login(parity_superuser)
+    assert_parity(client, "/admin/testapp/article/add/")
+
+
+def test_change_form(client, parity_superuser, parity_article):
+    client.force_login(parity_superuser)
+    assert_parity(client, f"/admin/testapp/article/{parity_article.pk}/change/")
+
+
+@pytest.fixture
+def article_to_delete_parity(db):
+    return Article.objects.create(title="Delete Me", slug="delete-me", status="draft")
+
+
+def test_delete_confirmation(client, parity_superuser, article_to_delete_parity):
+    client.force_login(parity_superuser)
+    assert_parity(client, f"/admin/testapp/article/{article_to_delete_parity.pk}/delete/")
+
+
+@pytest.fixture
+def article_for_history_parity(db):
+    return Article.objects.create(title="History Test", slug="history-test", status="draft")
+
+
+def test_history(client, parity_superuser, article_for_history_parity):
+    client.force_login(parity_superuser)
+    assert_parity(client, f"/admin/testapp/article/{article_for_history_parity.pk}/history/")
+
+
+def test_password_change(client, parity_superuser):
+    client.force_login(parity_superuser)
+    assert_parity(client, "/admin/password_change/")

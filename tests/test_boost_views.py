@@ -1,5 +1,6 @@
+import pytest
 from django.contrib.auth.models import User
-from django.test import TestCase, override_settings
+from django.test import override_settings
 
 from django_admin_boost.admin import ModelAdmin
 from django_admin_boost.boost import site as boost_site
@@ -60,75 +61,104 @@ BOOST_SETTINGS = {
 }
 
 
+@pytest.fixture
+def boost_setup(db):
+    admin_user = User.objects.create_superuser("admin", "admin@test.com", "password")
+    category = Category.objects.create(name="Tech")
+    article = Article.objects.create(
+        title="Test Article",
+        slug="test-article",
+        body="Test body",
+        category=category,
+        status=Article.Status.PUBLISHED,
+    )
+    return admin_user, category, article
+
+
 @override_settings(**BOOST_SETTINGS)
-class BoostAdminViewTest(TestCase):
-    @classmethod
-    def setUpTestData(cls):
-        cls.admin_user = User.objects.create_superuser("admin", "admin@test.com", "password")
-        cls.category = Category.objects.create(name="Tech")
-        cls.article = Article.objects.create(
-            title="Test Article",
-            slug="test-article",
-            body="Test body",
-            category=cls.category,
-            status=Article.Status.PUBLISHED,
+def test_boost_index(client, boost_setup):
+    admin_user, category, article = boost_setup
+    client.force_login(admin_user)
+    response = client.get("/admin/")
+    assert response.status_code == 200
+
+
+@override_settings(**BOOST_SETTINGS)
+def test_boost_app_index(client, boost_setup):
+    admin_user, category, article = boost_setup
+    client.force_login(admin_user)
+    response = client.get("/admin/testapp/")
+    assert response.status_code == 200
+
+
+@override_settings(**BOOST_SETTINGS)
+def test_boost_change_list(client, boost_setup):
+    admin_user, category, article = boost_setup
+    client.force_login(admin_user)
+    response = client.get("/admin/testapp/article/")
+    assert response.status_code == 200
+
+
+@override_settings(**BOOST_SETTINGS)
+def test_boost_add_form(client, boost_setup):
+    admin_user, category, article = boost_setup
+    client.force_login(admin_user)
+    response = client.get("/admin/testapp/article/add/")
+    assert response.status_code == 200
+
+
+@override_settings(**BOOST_SETTINGS)
+def test_boost_change_form(client, boost_setup):
+    admin_user, category, article = boost_setup
+    client.force_login(admin_user)
+    response = client.get(f"/admin/testapp/article/{article.pk}/change/")
+    assert response.status_code == 200
+
+
+@override_settings(**BOOST_SETTINGS)
+def test_boost_delete_confirmation(client, boost_setup):
+    admin_user, category, article = boost_setup
+    client.force_login(admin_user)
+    response = client.get(f"/admin/testapp/article/{article.pk}/delete/")
+    assert response.status_code == 200
+
+
+@override_settings(**BOOST_SETTINGS)
+def test_boost_object_history(client, boost_setup):
+    admin_user, category, article = boost_setup
+    client.force_login(admin_user)
+    response = client.get(f"/admin/testapp/article/{article.pk}/history/")
+    assert response.status_code == 200
+
+
+@override_settings(**BOOST_SETTINGS)
+def test_boost_login_page(client):
+    response = client.get("/admin/login/")
+    assert response.status_code == 200
+
+
+@pytest.fixture
+def boost_search_filter_setup(db):
+    admin_user = User.objects.create_superuser("admin", "admin@test.com", "password")
+    for i in range(25):
+        Article.objects.create(
+            title=f"Article {i}",
+            status=Article.Status.PUBLISHED if i % 2 else Article.Status.DRAFT,
         )
-
-    def setUp(self):
-        self.client.force_login(self.admin_user)
-
-    def test_index(self):
-        response = self.client.get("/admin/")
-        assert response.status_code == 200
-
-    def test_app_index(self):
-        response = self.client.get("/admin/testapp/")
-        assert response.status_code == 200
-
-    def test_change_list(self):
-        response = self.client.get("/admin/testapp/article/")
-        assert response.status_code == 200
-
-    def test_add_form(self):
-        response = self.client.get("/admin/testapp/article/add/")
-        assert response.status_code == 200
-
-    def test_change_form(self):
-        response = self.client.get(f"/admin/testapp/article/{self.article.pk}/change/")
-        assert response.status_code == 200
-
-    def test_delete_confirmation(self):
-        response = self.client.get(f"/admin/testapp/article/{self.article.pk}/delete/")
-        assert response.status_code == 200
-
-    def test_object_history(self):
-        response = self.client.get(f"/admin/testapp/article/{self.article.pk}/history/")
-        assert response.status_code == 200
-
-    def test_login_page(self):
-        self.client.logout()
-        response = self.client.get("/admin/login/")
-        assert response.status_code == 200
+    return admin_user
 
 
 @override_settings(**BOOST_SETTINGS)
-class BoostAdminSearchFilterTest(TestCase):
-    @classmethod
-    def setUpTestData(cls):
-        cls.admin_user = User.objects.create_superuser("admin", "admin@test.com", "password")
-        for i in range(25):
-            Article.objects.create(
-                title=f"Article {i}",
-                status=Article.Status.PUBLISHED if i % 2 else Article.Status.DRAFT,
-            )
+def test_boost_search(client, boost_search_filter_setup):
+    admin_user = boost_search_filter_setup
+    client.force_login(admin_user)
+    response = client.get("/admin/testapp/article/?q=Article+1")
+    assert response.status_code == 200
 
-    def setUp(self):
-        self.client.force_login(self.admin_user)
 
-    def test_search(self):
-        response = self.client.get("/admin/testapp/article/?q=Article+1")
-        assert response.status_code == 200
-
-    def test_filter(self):
-        response = self.client.get("/admin/testapp/article/?status__exact=published")
-        assert response.status_code == 200
+@override_settings(**BOOST_SETTINGS)
+def test_boost_filter(client, boost_search_filter_setup):
+    admin_user = boost_search_filter_setup
+    client.force_login(admin_user)
+    response = client.get("/admin/testapp/article/?status__exact=published")
+    assert response.status_code == 200
