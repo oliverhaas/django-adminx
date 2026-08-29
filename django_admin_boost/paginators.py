@@ -42,7 +42,46 @@ class EstimatedCountPaginator(Paginator):
                 self._used_estimate = True
                 return int(estimate)
 
+        # Strip display-only annotations for a lighter count query
+        return self._smart_count(queryset)
+
+    def _smart_count(self, queryset: QuerySet) -> int:
+        """Count rows, stripping annotations not needed for filtering/ordering."""
+        annotations_in_use = self._get_referenced_annotations(queryset)
+        all_annotations = set(queryset.query.annotations.keys())
+        display_only = all_annotations - annotations_in_use
+
+        if display_only:
+            # Create a stripped queryset for counting
+            count_qs = queryset.all()  # clone
+            for name in display_only:
+                count_qs.query.annotations.pop(name, None)
+            # Recalculate group_by after removing annotations; otherwise Django
+            # may issue a flat COUNT(*) over the join and return wrong results.
+            count_qs.query.set_group_by()
+            return count_qs.count()
+
         return queryset.count()
+
+    def _get_referenced_annotations(self, queryset: QuerySet) -> set[str]:
+        """Return annotation names referenced by WHERE or ORDER BY clauses."""
+        referenced = set()
+
+        # Check WHERE clause
+        where_sql = str(queryset.query.where)
+        for name in queryset.query.annotations:
+            if name in where_sql:
+                referenced.add(name)
+
+        # Check ORDER BY
+        for ordering in queryset.query.order_by:
+            if not isinstance(ordering, str):
+                continue
+            clean_name = ordering.lstrip("-")
+            if clean_name in queryset.query.annotations:
+                referenced.add(clean_name)
+
+        return referenced
 
     @property
     def is_approximate_count(self) -> bool:
